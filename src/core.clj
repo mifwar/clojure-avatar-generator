@@ -37,40 +37,59 @@
                   justify-content: center;
                   align-items: center;"})
 
-(defn viewer-content [uname]
-  (let [src (str "https://robohash.org/" uname "?size=400x400")]
-    [:div
-     [:h1 {:style "text-align: center"} "Random Avatar Generator"]
-     [:div {:style "display: flex;
+(defn viewer-content [uname url]
+  [:div
+   [:h1 {:style "text-align: center"} "Random Avatar Generator"]
+   [:div {:style "display: flex;
                   justify-content: center;
                   align-items: center;
                   padding: 10px"}
-      [:form {:method "get"
-              :action "/viewer"}
-       [:input {:type :text
-                :id :name
-                :name :username
-                :placeholder "write your name here"
-                :style "margin: 0px 10px 0px 10px"
-                :required :required}]
-       [:input {:type :submit
-                :value "Generate"}]]]
-     [:div align-center
-      (when (not (nil? uname))
-        [:div
-         [:img {:src src}]
-         [:p {:style "text-align: center"} (str "username: " uname)]])]]))
+    [:form {:method "get"
+            :action "/viewer"}
+     [:input {:type :text
+              :id :name
+              :name :username
+              :placeholder "write your name here"
+              :style "margin: 0px 10px 0px 10px"
+              :required :required}]
+     [:input {:type :submit
+              :value "Generate"}]]]
+   [:div align-center
+    (when (not (nil? uname))
+      [:div
+       [:img {:src url}]
+       [:p {:style "text-align: center"} (str "username: " uname)]])]])
 
-(defn viewer-page [request]
-  (let [username (-> request
-                     :query-params
-                     :username) 
-        result (->> (viewer-content username)
-                    page/html5
-                    ring-resp/response)]
-    result))
+;; (defn viewer-page [request]
+;;   (let [username (-> request
+;;                      :query-params
+;;                      :username) 
+;;         _(println "all konteks bang: " request)
+;;         result (->> (viewer-content username)
+;;                     page/html5
+;;                     ring-resp/response)]
+;;     result))
 
 ;;interceptor
+(def uname-converter
+  {:name ::uname-converter
+   :enter
+   (fn [context]
+     (let [username (get-in context [:request :params :username]  nil)
+           url (when username
+                 (str "https://robohash.org/" username "?size=400x400"))]
+       (assoc context :answer {:uname username :url url})))})
+
+(def viewer-page
+  {:name ::viewer-page
+   :enter
+   (fn [context]
+     (let [username (get-in context [:answer :uname])
+           url (get-in context [:answer :url])
+           response (->> (viewer-content username url)
+                         page/html5
+                         ring-resp/response)]
+       (assoc context :response response)))})
 
 (def supported-types ["text/html" "application/edn" "application/json" "text/plain"])
 
@@ -103,7 +122,7 @@
   (route/expand-routes
    #{["/greet" :get [coerce-body content-neg-intc respond-hello] :route-name :greet]
      ["/" :get respond-hi :route-name :hi]
-     ["/viewer" :get (conj common-interceptors viewer-page) :route-name :viewer-get]
+     ["/viewer" :get (conj common-interceptors uname-converter viewer-page) :route-name :viewer-get]
      ["/echo"  :get echo]}))
 
 (def service-map
